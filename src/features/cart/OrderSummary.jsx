@@ -7,12 +7,17 @@ export function OrderSummary({
   subtotal,
   savings = 0,
   shippingFee,
+  discountAmount = 0,
+  couponCode = '',
   onProceedToCheckout,
   showCheckoutBtn = true,
   isCheckingOut = false,
 }) {
-  const deliveryFee = shippingFee ?? (subtotal >= 999 ? 0 : 99);
-  const finalTotal = subtotal + deliveryFee;
+  subtotal = Number(subtotal) || 0;
+  savings = Number(savings) || 0;
+  discountAmount = Number(discountAmount) || 0;
+  const deliveryFee = Number(shippingFee ?? (subtotal >= 999 ? 0 : 99)) || 0;
+  const finalTotal = Math.max(0, subtotal + deliveryFee - discountAmount);
 
   return (
     <div className="bg-white p-6 rounded-2xl border border-brand-nude/80 shadow-xs space-y-5">
@@ -31,6 +36,13 @@ export function OrderSummary({
           <div className="flex justify-between text-emerald-700">
             <span>Special Style Discount</span>
             <span>-{formatCurrency(savings)}</span>
+          </div>
+        )}
+
+        {discountAmount > 0 && (
+          <div className="flex justify-between text-emerald-700">
+            <span>Coupon discount{couponCode ? ` (${couponCode})` : ''}</span>
+            <span>-{formatCurrency(discountAmount)}</span>
           </div>
         )}
 

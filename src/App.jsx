@@ -21,6 +21,7 @@ import { useAuthStore } from './store/useAuthStore';
 import { useCartStore } from './store/useCartStore';
 import { useWishlistStore } from './store/useWishlistStore';
 import { useCatalogStore } from './store/useCatalogStore';
+import { AdminApp } from './admin/AdminApp';
 
 // Scroll to top helper on route change
 function ScrollToTop() {
@@ -32,9 +33,13 @@ function ScrollToTop() {
 }
 
 export function AppContent() {
+  const location = useLocation();
+  const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const session = useAuthStore((s) => s.session);
   const setUser = useAuthStore((s) => s.setUser);
+  const setProfileLoading = useAuthStore((s) => s.setProfileLoading);
+  const setProfileError = useAuthStore((s) => s.setProfileError);
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const loadCart = useCartStore((s) => s.loadCart);
   const resetCart = useCartStore((s) => s.reset);
@@ -44,8 +49,9 @@ export function AppContent() {
   const accessToken = session?.access_token;
 
   useEffect(() => {
+    if (isAdminRoute) return;
     loadCategories();
-  }, [loadCategories]);
+  }, [isAdminRoute, loadCategories]);
 
   useEffect(() => {
     const handleExpiredSession = () => {
@@ -65,27 +71,41 @@ export function AppContent() {
     }
 
     let cancelled = false;
-    api.get('/auth/me')
+    setProfileLoading();
+    api.get('/auth/me/')
       .then((user) => {
         if (!cancelled) setUser(user);
       })
       .catch((error) => {
-        if (!cancelled && [401, 403, 404].includes(error.status)) {
-          clearAuth();
-          resetCart();
-          resetWishlist();
+        if (!cancelled) {
+          if ([401, 403, 404].includes(error.status)) {
+            clearAuth();
+            resetCart();
+            resetWishlist();
+          } else {
+            setProfileError(error.message);
+          }
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [accessToken, setUser, clearAuth, resetCart, resetWishlist]);
+  }, [accessToken, setUser, setProfileLoading, setProfileError, clearAuth, resetCart, resetWishlist]);
 
   useEffect(() => {
-    if (!accessToken) return undefined;
+    if (isAdminRoute || !accessToken) return undefined;
     Promise.allSettled([loadCart(), loadWishlist()]);
     return undefined;
-  }, [accessToken, loadCart, loadWishlist]);
+  }, [isAdminRoute, accessToken, loadCart, loadWishlist]);
+
+  if (isAdminRoute) {
+    return (
+      <>
+        <ScrollToTop />
+        <AdminApp />
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-brand-cream text-brand-charcoal antialiased">

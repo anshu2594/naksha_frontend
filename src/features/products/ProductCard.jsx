@@ -16,6 +16,7 @@ export function ProductCard({ product }) {
   const user = useAuthStore((s) => s.user);
 
   const currentImage = product.images?.[isHovered ? 1 : 0] || product.image;
+  const productPath = `/product/${product.slug || product.id}`;
 
   const discountPercent = product.originalPrice
     ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
@@ -29,7 +30,7 @@ export function ProductCard({ product }) {
     >
       {/* Product Image Area */}
       <div className="relative aspect-[3/4] w-full overflow-hidden bg-brand-nude/30">
-        <Link to={`/product/${product.id}`} className="block w-full h-full">
+        <Link to={productPath} className="block w-full h-full">
           <img
             src={currentImage}
             alt={product.name}
@@ -102,7 +103,7 @@ export function ProductCard({ product }) {
         </div>
 
         {/* Title */}
-        <Link to={`/product/${product.id}`} className="group-hover:text-brand-roseGold transition-colors">
+        <Link to={productPath} className="group-hover:text-brand-roseGold transition-colors">
           <h3 className="text-sm font-medium text-brand-charcoal line-clamp-1">
             {product.name}
           </h3>
@@ -144,7 +145,7 @@ export function ProductCard({ product }) {
           </div>
 
           <Link
-            to={`/product/${product.id}`}
+            to={productPath}
             className="text-xs font-semibold text-brand-roseGold hover:text-brand-terracotta group-hover:underline"
           >
             Select Size →

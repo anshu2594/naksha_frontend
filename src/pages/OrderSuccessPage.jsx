@@ -1,22 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useSearchParams, Link, Navigate } from 'react-router-dom';
 import { CheckCircle2, ShieldCheck, ArrowRight, Truck } from 'lucide-react';
-import { api } from '../services/api';
+import { getOrder, normalizeOrderResponse } from '../services/commerce';
 import { formatCurrency } from '../utils/formatCurrency';
 import { Button } from '../components/common/Button';
+
+function formatOrderCurrency(value) {
+  const amount = Number(value ?? 0);
+  return formatCurrency(Number.isFinite(amount) ? amount : 0);
+}
 
 export function OrderSuccessPage() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const orderId = searchParams.get('id');
-  const [order, setOrder] = useState(location.state?.order || null);
+  const [order, setOrder] = useState(normalizeOrderResponse(location.state?.order || null));
   const [loading, setLoading] = useState(!location.state?.order && Boolean(orderId));
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!orderId || order) return undefined;
     const controller = new AbortController();
-    api.get(`/orders/${orderId}`, { signal: controller.signal })
+    getOrder(orderId, { signal: controller.signal })
       .then(setOrder)
       .catch((requestError) => {
         if (requestError.name !== 'AbortError') setError(requestError.message);
@@ -52,7 +57,7 @@ export function OrderSuccessPage() {
           <CheckCircle2 className="w-9 h-9 stroke-[2]" />
         </div>
         <span className="text-xs uppercase tracking-widest text-emerald-800 font-bold bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-          Order {order.status.toLowerCase()} · Payment {order.payment_status.toLowerCase()}
+          Order {String(order.status || 'pending').toLowerCase()} · Payment {String(order.payment_status || 'pending').toLowerCase()}
         </span>
         <h1 className="text-3xl sm:text-4xl font-serif font-bold text-brand-charcoal">Thank You For Your Order!</h1>
         <p className="text-xs sm:text-sm text-brand-subtle max-w-md mx-auto">
@@ -63,8 +68,12 @@ export function OrderSuccessPage() {
       <div className="p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl flex items-start gap-3.5">
         <ShieldCheck className="w-6 h-6 text-emerald-700 shrink-0 mt-0.5" />
         <div className="text-xs text-emerald-950 space-y-0.5">
-          <span className="font-bold block text-sm">Discreet packaging</span>
-          <p className="text-emerald-900 leading-relaxed">Your order will be prepared in neutral, discreet packaging.</p>
+          <span className="font-bold block text-sm">{order.discreet_package ? 'Discreet packaging' : 'Careful packaging'}</span>
+          <p className="text-emerald-900 leading-relaxed">
+            {order.discreet_package
+              ? 'Your order will be prepared in neutral, discreet packaging.'
+              : 'Your order will be carefully packed for delivery.'}
+          </p>
         </div>
       </div>
 
@@ -99,7 +108,7 @@ export function OrderSuccessPage() {
                     <span>Qty: {item.quantity}</span>
                   </div>
                 </div>
-                <div className="text-right text-xs sm:text-sm font-bold text-brand-charcoal">{formatCurrency(item.subtotal)}</div>
+                <div className="text-right text-xs sm:text-sm font-bold text-brand-charcoal">{formatOrderCurrency(item.subtotal)}</div>
               </div>
             ))}
           </div>
@@ -116,7 +125,9 @@ export function OrderSuccessPage() {
             <span className="text-brand-subtle uppercase tracking-wider font-semibold block">Payment Summary</span>
             <p className="text-brand-subtle">Method: <strong className="uppercase text-brand-charcoal">{order.payment_method}</strong></p>
             <p className="text-brand-subtle">Status: <strong className="uppercase text-brand-charcoal">{order.payment_status}</strong></p>
-            <div className="text-lg font-serif font-bold text-brand-charcoal pt-1">Order total: {formatCurrency(order.total_amount)}</div>
+            {order.couponCode && <p className="text-brand-subtle">Coupon: <strong className="text-brand-charcoal">{order.couponCode}</strong></p>}
+            {Number(order.discount_amount) > 0 && <p className="text-emerald-700">Coupon savings: −{formatOrderCurrency(order.discount_amount)}</p>}
+            <div className="text-lg font-serif font-bold text-brand-charcoal pt-1">Order total: {formatOrderCurrency(order.total_amount)}</div>
           </div>
         </div>
       </div>

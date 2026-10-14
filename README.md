@@ -22,9 +22,13 @@ Do not put server secrets in Vite environment variables. The frontend uses the A
 | Account sign-in, registration, email verification, sign-out, current profile | `POST /auth/login`, `POST /auth/register`, `POST /auth/verify-otp`, `POST /auth/resend-otp`, `POST /auth/logout`, `GET /auth/me`, `POST /auth/refresh` |
 | Shopping bag | `GET /cart`, `POST /cart/items`, `PUT /cart/items/{item_id}`, `DELETE /cart/items/{item_id}` |
 | Wishlist | `GET /wishlist`, `POST /wishlist/toggle/{product_id}` |
-| Checkout and order confirmation | `POST /orders`, `GET /orders/{id}` |
+| Guest identity and cart | `POST /session/` once per browser profile; send the stored `X-Guest-ID` on cart requests |
+| Checkout, promotions, and order confirmation | `POST /cart/quote/`, `POST /orders`, `GET /orders/{id}` (all with `X-Guest-ID`) |
+| Razorpay sandbox checkout | `POST /orders/{id}/payment/`, `POST /orders/{id}/payment/verify/` (with `X-Guest-ID`); provider webhooks are server-only |
+| Staff administration | `/admin/login`, then `/admin/dashboard`, `/admin/products`, `/admin/categories`, `/admin/customers`, `/admin/orders`, `/admin/payments`, and `/admin/offers` |
+| Admin API | Staff-only `/admin/dashboard/`, `/admin/products/`, `/admin/categories/`, `/admin/customers/`, `/admin/orders/`, `/admin/offers/`, image upload, and refund endpoints |
 
-The API currently seeds Bras, Panties, Sexy Lingerie, Baby Dolls, Nightwear, and Shapewear. Its product schema exposes one image and no variant, color, or garment-detail fields; the frontend therefore displays only catalog-provided fields and sends the API's standard `M` size for cart items. The backend records a payment method but does not process online payments. Product/category admin CRUD, order-history management, newsletter, and contact screens are not present in this frontend.
+The browser provisions one guest identity with `POST /session/`, persists its `guestId`, and sends `X-Guest-ID` consistently on cart, coupon, order, and payment requests. Sign-in does not replace that commerce identity. The staff dashboard uses a separate username/password login and requires the current `/auth/me/` response to confirm `isStaff: true`; the backend independently rechecks staff permission on every admin request. Configure no payment secrets in Vite: Razorpay checkout uses the public test `keyId` returned by the API, and payment verification happens server-side. Products, categories, customers, orders, refunds, and scheduled coupon offers are managed through the admin route family without changing the storefront shell.
 
 ## Run locally
 

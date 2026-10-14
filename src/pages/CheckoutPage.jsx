@@ -1,12 +1,48 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Lock, ArrowLeft } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore';
 import { AddressForm } from '../features/checkout/AddressForm';
 import { PaymentSelector } from '../features/checkout/PaymentSelector';
 import { OrderSummary } from '../features/cart/OrderSummary';
-import { api } from '../services/api';
+import {
+  createOrder,
+  createOrderPayment,
+  quoteCoupon,
+  verifyOrderPayment,
+} from '../services/commerce';
 import { Button } from '../components/common/Button';
+
+function loadRazorpay() {
+  if (window.Razorpay) return Promise.resolve(window.Razorpay);
+
+  return new Promise((resolve, reject) => {
+    const existingScript = document.querySelector('script[data-razorpay-checkout]');
+    const script = existingScript || document.createElement('script');
+    const onLoad = () => {
+      script.dataset.razorpayLoaded = 'true';
+      if (window.Razorpay) resolve(window.Razorpay);
+      else reject(new Error('Razorpay checkout did not initialize. Please retry.'));
+    };
+    const onError = () => {
+      script.remove();
+      reject(new Error('Unable to load the Razorpay checkout. Check your connection and retry.'));
+    };
+
+    if (existingScript?.dataset.razorpayLoaded === 'true') {
+      reject(new Error('Razorpay checkout did not initialize. Please refresh and retry.'));
+      return;
+    }
+    script.addEventListener('load', onLoad, { once: true });
+    script.addEventListener('error', onError, { once: true });
+    if (!existingScript) {
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.dataset.razorpayCheckout = 'true';
+      document.body.appendChild(script);
+    }
+  });
+}
 
 export function CheckoutPage() {
   const navigate = useNavigate();
@@ -25,8 +61,15 @@ export function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState('upi');
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [couponCodeInput, setCouponCodeInput] = useState('');
+  const [appliedCouponCode, setAppliedCouponCode] = useState('');
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+  const [pendingPaymentOrder, setPendingPaymentOrder] = useState(null);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const paymentIdempotencyKeys = useRef(new Map());
 
-  const subtotal = getSubtotal();
+  const subtotal = Number(getSubtotal()) || 0;
   const savings = getTotalSavings();
 
   const handleInputChange = (e) => {
@@ -42,6 +85,93 @@ export function CheckoutPage() {
       await loadCart();
     } catch {
       // The cart store exposes the request error for the checkout page.
+    }
+  };
+
+  const handleApplyCoupon = async () => {
+    const code = couponCodeInput.trim().toUpperCase();
+    setErrorMsg('');
+    if (!code) {
+      setAppliedCouponCode('');
+      setCouponDiscount(0);
+      return;
+    }
+
+    setIsApplyingCoupon(true);
+    try {
+      const quote = await quoteCoupon(code);
+      setAppliedCouponCode(quote.couponCode || code);
+      setCouponDiscount(Number(quote.discountAmount) || 0);
+    } catch (error) {
+      setAppliedCouponCode('');
+      setCouponDiscount(0);
+      setErrorMsg(error.message);
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  };
+
+  const startRazorpayPayment = async (order) => {
+    const orderId = order.id;
+    let idempotencyKey = paymentIdempotencyKeys.current.get(String(orderId));
+    if (!idempotencyKey) {
+      idempotencyKey = crypto.randomUUID();
+      paymentIdempotencyKeys.current.set(String(orderId), idempotencyKey);
+    }
+
+    const payment = await createOrderPayment(orderId, idempotencyKey);
+    const Razorpay = await loadRazorpay();
+    const checkout = new Razorpay({
+      key: payment.keyId,
+      amount: payment.amount,
+      currency: payment.currency,
+      name: 'Naksha',
+      description: `Order ${order.order_number || orderId}`,
+      order_id: payment.razorpayOrderId,
+      theme: { color: '#C06C64' },
+      handler: async (response) => {
+        setIsCheckoutOpen(false);
+        setErrorMsg('');
+        try {
+          await verifyOrderPayment(orderId, {
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          }, { guest: true });
+          setPendingPaymentOrder(null);
+          paymentIdempotencyKeys.current.delete(String(orderId));
+          reset();
+          navigate(`/order-success?id=${orderId}`);
+        } catch (error) {
+          setErrorMsg(`Payment verification is not confirmed yet. Your order ${order.order_number || orderId} remains available; retry or check its status before paying again. ${error.message}`);
+        }
+      },
+      modal: {
+        ondismiss: () => {
+          setIsCheckoutOpen(false);
+          setErrorMsg(`Payment was not completed. Order ${order.order_number || orderId} is saved and can be paid again below.`);
+        },
+      },
+    });
+    checkout.on('payment.failed', (event) => {
+      setIsCheckoutOpen(false);
+      const failure = event?.error?.description || 'Payment was not completed.';
+      setErrorMsg(`${failure} Your order ${order.order_number || orderId} remains saved and can be paid again below.`);
+    });
+    setIsCheckoutOpen(true);
+    checkout.open();
+  };
+
+  const handleRetryPayment = async () => {
+    if (!pendingPaymentOrder || isProcessing || isCheckoutOpen) return;
+    setIsProcessing(true);
+    setErrorMsg('');
+    try {
+      await startRazorpayPayment(pendingPaymentOrder);
+    } catch (error) {
+      setErrorMsg(`Unable to start payment for order ${pendingPaymentOrder.order_number || pendingPaymentOrder.id}. ${error.message}`);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -68,24 +198,41 @@ export function CheckoutPage() {
     }
 
     setIsProcessing(true);
+    let createdOrder = null;
     try {
-      const paymentMethods = { upi: 'UPI', card: 'CARD', cod: 'COD' };
-      const order = await api.post('/orders', {
-        shipping_name: formData.fullName.trim(),
-        shipping_phone: formData.phone.trim(),
-        shipping_address: formData.address.trim(),
-        shipping_city: formData.city.trim(),
-        shipping_state: formData.state.trim(),
-        shipping_pincode: formData.pincode.trim(),
-        payment_method: paymentMethods[paymentMethod],
-        order_notes: formData.discreetPackage ? 'Discreet packaging requested' : '',
-        from_cart: true,
+      const order = await createOrder({
+        shippingAddress: {
+          fullName: formData.fullName.trim(),
+          phone: formData.phone.trim(),
+          address: formData.address.trim(),
+          city: formData.city.trim(),
+          state: formData.state.trim(),
+          pincode: formData.pincode.trim(),
+          discreetPackage: formData.discreetPackage,
+        },
+        paymentMethod,
+        couponCode: appliedCouponCode,
       });
-      reset();
+      createdOrder = order;
+      if (!order?.id) {
+        setErrorMsg('The order was created, but its response did not include an order ID. Contact the store before retrying to avoid placing a duplicate order.');
+        setIsProcessing(false);
+        return;
+      }
+      if (paymentMethod === 'cod') {
+        reset();
+        setPendingPaymentOrder(null);
+        setIsProcessing(false);
+        navigate(`/order-success?id=${order.id}`, { state: { order } });
+        return;
+      }
+      setPendingPaymentOrder(order);
+      await startRazorpayPayment(order);
       setIsProcessing(false);
-      navigate(`/order-success?id=${order.id}`, { state: { order } });
     } catch (error) {
-      setErrorMsg(error.message);
+      setErrorMsg(createdOrder
+        ? `Order ${createdOrder.order_number || createdOrder.id} was created, but payment could not be started. Retry payment below. ${error.message}`
+        : error.message);
       setIsProcessing(false);
     }
   };
@@ -135,8 +282,14 @@ export function CheckoutPage() {
       </div>
 
       {errorMsg && (
-        <div className="p-3 bg-rose-50 text-rose-700 text-xs rounded-xl border border-rose-200">
+        <div role="alert" className="p-3 bg-rose-50 text-rose-700 text-xs rounded-xl border border-rose-200">
           {errorMsg}
+        </div>
+      )}
+      {pendingPaymentOrder && (
+        <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-amber-950">Order {pendingPaymentOrder.order_number || pendingPaymentOrder.id} is awaiting payment. Retry payment for this order instead of placing it again.</p>
+          {!isCheckoutOpen && <Button onClick={handleRetryPayment} isLoading={isProcessing}>Retry payment</Button>}
         </div>
       )}
 
@@ -150,6 +303,29 @@ export function CheckoutPage() {
             selectedMethod={paymentMethod}
             onSelectMethod={setPaymentMethod}
           />
+          <div className="rounded-2xl border border-brand-nude bg-white p-5 shadow-xs">
+            <label htmlFor="coupon-code" className="block text-sm font-semibold text-brand-charcoal">Promotion code</label>
+            <div className="mt-3 flex gap-2">
+              <input
+                id="coupon-code"
+                value={couponCodeInput}
+                onChange={(event) => {
+                  const nextCode = event.target.value.toUpperCase();
+                  setCouponCodeInput(nextCode);
+                  if (nextCode.trim() !== appliedCouponCode) {
+                    setAppliedCouponCode('');
+                    setCouponDiscount(0);
+                  }
+                }}
+                maxLength={40}
+                autoComplete="off"
+                placeholder="Enter coupon code"
+                className="min-w-0 flex-1 rounded-xl border border-brand-nude bg-brand-cream px-3.5 py-2.5 text-sm outline-none focus:border-brand-roseGold focus:ring-2 focus:ring-brand-blush/40"
+              />
+              <Button type="button" variant="outline" onClick={handleApplyCoupon} isLoading={isApplyingCoupon}>Apply</Button>
+            </div>
+            {appliedCouponCode && <p role="status" className="mt-2 text-xs font-medium text-emerald-700">Coupon {appliedCouponCode} applied.</p>}
+          </div>
         </div>
 
         {/* Right Column: Order Summary & Place Order */}
@@ -158,8 +334,10 @@ export function CheckoutPage() {
             subtotal={subtotal}
             savings={savings}
             shippingFee={shippingFee}
+            discountAmount={couponDiscount}
+            couponCode={appliedCouponCode}
             onProceedToCheckout={handlePlaceOrder}
-            showCheckoutBtn={true}
+            showCheckoutBtn={!pendingPaymentOrder}
             isCheckingOut={isProcessing}
           />
         </div>
