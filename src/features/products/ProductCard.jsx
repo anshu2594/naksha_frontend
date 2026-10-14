@@ -1,17 +1,21 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Heart, Star, Sparkles } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Heart, Star } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { Badge } from '../../components/common/Badge';
 import { useWishlistStore } from '../../store/useWishlistStore';
+import { useAuthStore } from '../../store/useAuthStore';
 
 export function ProductCard({ product }) {
   const [isHovered, setIsHovered] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const navigate = useNavigate();
+  const location = useLocation();
   const toggleWishlist = useWishlistStore((s) => s.toggleWishlist);
   const isInWishlist = useWishlistStore((s) => s.isInWishlist(product.id));
+  const user = useAuthStore((s) => s.user);
 
-  const hasMultipleImages = product.images && product.images.length > 1;
-  const currentImage = (isHovered && hasMultipleImages) ? product.images[1] : product.images[0];
+  const currentImage = product.images?.[isHovered ? 1 : 0] || product.image;
 
   const discountPercent = product.originalPrice
     ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
@@ -25,7 +29,7 @@ export function ProductCard({ product }) {
     >
       {/* Product Image Area */}
       <div className="relative aspect-[3/4] w-full overflow-hidden bg-brand-nude/30">
-        <Link to={`/product/${product.slug}`} className="block w-full h-full">
+        <Link to={`/product/${product.id}`} className="block w-full h-full">
           <img
             src={currentImage}
             alt={product.name}
@@ -56,10 +60,19 @@ export function ProductCard({ product }) {
         {/* Wishlist Button */}
         <button
           type="button"
-          onClick={(e) => {
+          onClick={async (e) => {
             e.preventDefault();
             e.stopPropagation();
-            toggleWishlist(product);
+            setActionError('');
+            if (!user) {
+              navigate('/account', { state: { from: location } });
+              return;
+            }
+            try {
+              await toggleWishlist(product);
+            } catch (error) {
+              setActionError(error.message);
+            }
           }}
           className={`absolute top-3 right-3 p-2 rounded-full transition-all duration-200 z-10 ${
             isInWishlist
@@ -70,17 +83,11 @@ export function ProductCard({ product }) {
         >
           <Heart className={`w-4 h-4 ${isInWishlist ? 'fill-rose-600' : ''}`} />
         </button>
+        {actionError && <p role="alert" className="absolute top-14 right-3 z-10 max-w-[75%] rounded-lg bg-rose-50 px-2 py-1 text-[10px] text-rose-700">{actionError}</p>}
 
         {/* Category Specific Feature Tag on bottom-left of image */}
         <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between text-[11px] font-medium text-white/90 bg-black/40 backdrop-blur-xs px-2.5 py-1 rounded-lg">
-          {product.category === 'bra' ? (
-            <span>{product.padding} • {product.wire}</span>
-          ) : (
-            <span className="truncate">{product.neckline}</span>
-          )}
-          {product.category === 'blouse' && (
-            <span className="text-amber-200 text-[10px] font-semibold shrink-0 ml-1">Margin: {product.alterationMargin?.split(' ')[0]}</span>
-          )}
+          <span className="truncate">{product.category}</span>
         </div>
       </div>
 
@@ -95,7 +102,7 @@ export function ProductCard({ product }) {
         </div>
 
         {/* Title */}
-        <Link to={`/product/${product.slug}`} className="group-hover:text-brand-roseGold transition-colors">
+        <Link to={`/product/${product.id}`} className="group-hover:text-brand-roseGold transition-colors">
           <h3 className="text-sm font-medium text-brand-charcoal line-clamp-1">
             {product.name}
           </h3>
@@ -103,11 +110,7 @@ export function ProductCard({ product }) {
 
         {/* Sizes summary */}
         <div className="mt-1 text-[11px] text-brand-subtle">
-          {product.category === 'bra' ? (
-            <span>Sizes: {product.availableSizes[0]}-{product.availableSizes[product.availableSizes.length - 1]} | Cups: {product.availableCups.join(', ')}</span>
-          ) : (
-            <span>Bust Sizes: {product.availableSizes.join(', ')}</span>
-          )}
+          <span>{product.tag || 'In the collection'}</span>
         </div>
 
         {/* Color preview dots */}
@@ -141,7 +144,7 @@ export function ProductCard({ product }) {
           </div>
 
           <Link
-            to={`/product/${product.slug}`}
+            to={`/product/${product.id}`}
             className="text-xs font-semibold text-brand-roseGold hover:text-brand-terracotta group-hover:underline"
           >
             Select Size →

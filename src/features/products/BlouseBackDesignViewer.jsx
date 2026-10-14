@@ -2,8 +2,8 @@ import React from 'react';
 import { Eye, Sparkles } from 'lucide-react';
 
 export function BlouseBackDesignViewer({
-  frontImage,
-  backImage,
+  frontImage: _frontImage,
+  backImage: _backImage,
   activeView, // 'front' | 'back'
   onToggleView,
   backDesignTitle,

@@ -1,20 +1,50 @@
-<<<<<<< HEAD
-# React + Vite
+# Naksha Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React 19 storefront built with Vite, Tailwind CSS, React Router, and Zustand. Product, category, cart, wishlist, authentication, order, and store-highlight data are provided by the Naksha REST API.
 
-Currently, two official plugins are available:
+## API configuration
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Copy `.env.example` to `.env` and set `VITE_API_BASE_URL` to the API root, including its version prefix. The current backend defaults to:
 
-## React Compiler
+```dotenv
+VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Do not put server secrets in Vite environment variables. The frontend uses the API's bearer-token authentication and stores the session in browser local storage because the backend exposes tokens rather than an HttpOnly-cookie flow.
 
-## Expanding the Oxlint configuration
+## Integration map
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
-=======
-# naksha
->>>>>>> 8d3ff52ff9a78c2b9d32bd444adb17a3385784b8
+| Frontend surface | API contract |
+| --- | --- |
+| Home collection cards and footer | `GET /categories`; `GET /highlights` |
+| Home best sellers and shop search/filter/sort/paging | `GET /products` with `tag`, `category`, `search`, `sort_by`, `limit`, and `offset` |
+| Product detail | `GET /products/{id}` |
+| Account sign-in, registration, email verification, sign-out, current profile | `POST /auth/login`, `POST /auth/register`, `POST /auth/verify-otp`, `POST /auth/resend-otp`, `POST /auth/logout`, `GET /auth/me`, `POST /auth/refresh` |
+| Shopping bag | `GET /cart`, `POST /cart/items`, `PUT /cart/items/{item_id}`, `DELETE /cart/items/{item_id}` |
+| Wishlist | `GET /wishlist`, `POST /wishlist/toggle/{product_id}` |
+| Checkout and order confirmation | `POST /orders`, `GET /orders/{id}` |
+
+The API currently seeds Bras, Panties, Sexy Lingerie, Baby Dolls, Nightwear, and Shapewear. Its product schema exposes one image and no variant, color, or garment-detail fields; the frontend therefore displays only catalog-provided fields and sends the API's standard `M` size for cart items. The backend records a payment method but does not process online payments. Product/category admin CRUD, order-history management, newsletter, and contact screens are not present in this frontend.
+
+## Run locally
+
+Install and run the frontend from the repository root:
+
+```powershell
+npm install
+Copy-Item .env.example .env
+npm run dev
+```
+
+Run the companion backend in a separate PowerShell window from its repository:
+
+```powershell
+Set-Location C:\path\to\Naksha_backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python seed.py
+python run.py
+```
+
+The backend's default API documentation is available at `http://127.0.0.1:8000/docs`. Run the frontend checks with `npm run lint` and `npm run build`; run backend tests from the backend repository with `python -m pytest tests/test_api.py -v`.

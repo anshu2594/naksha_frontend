@@ -6,7 +6,7 @@ export function PaymentSelector({ selectedMethod, onSelectMethod }) {
     {
       id: 'upi',
       name: 'UPI Instant Payment',
-      desc: 'Google Pay, PhonePe, Paytm, BHIM UPI (Instant 2% Extra Cashback)',
+      desc: 'Google Pay, PhonePe, Paytm, BHIM UPI',
       icon: <Smartphone className="w-5 h-5 text-emerald-600" />,
       badge: 'Popular',
     },
@@ -30,9 +30,9 @@ export function PaymentSelector({ selectedMethod, onSelectMethod }) {
         <h3 className="font-serif text-lg font-semibold text-brand-charcoal">
           Payment Method
         </h3>
-        <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+        <span className="text-[11px] text-brand-subtle font-semibold flex items-center gap-1">
           <ShieldCheck className="w-3.5 h-3.5" />
-          Encrypted & Discreet Billing
+          Payment preference
         </span>
       </div>
 
@@ -78,7 +78,7 @@ export function PaymentSelector({ selectedMethod, onSelectMethod }) {
       </div>
 
       <div className="text-[11px] text-brand-subtle bg-brand-cream p-3 rounded-xl border border-brand-nude/50">
-        Bank statement will appear as <strong>"NAKSHA RETAIL"</strong> with no mention of intimate apparel.
+        The selected method is recorded with your order. This API does not process online payments; payment status remains pending until a payment provider is connected.
       </div>
     </div>
   );

@@ -1,44 +1,42 @@
 import { create } from 'zustand';
-
-const WISHLIST_STORAGE_KEY = 'naksha_boutique_wishlist_v1';
-
-const getInitialWishlist = () => {
-  try {
-    const saved = localStorage.getItem(WISHLIST_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
-  } catch (e) {
-    console.error('Failed to load wishlist from localStorage', e);
-    return [];
-  }
-};
+import { api, getStoredSession } from '../services/api';
+import { normalizeProduct } from '../services/catalog';
 
 export const useWishlistStore = create((set, get) => ({
-  wishlist: getInitialWishlist(),
+  wishlist: [],
+  isLoading: Boolean(getStoredSession()?.access_token),
+  error: '',
 
-  toggleWishlist: (product) => {
-    set((state) => {
-      const exists = state.wishlist.some((item) => item.id === product.id);
-      let updated;
-      if (exists) {
-        updated = state.wishlist.filter((item) => item.id !== product.id);
-      } else {
-        updated = [product, ...state.wishlist];
-      }
-      localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(updated));
-      return { wishlist: updated };
-    });
+  loadWishlist: async () => {
+    set({ isLoading: true, error: '' });
+    try {
+      const response = await api.get('/wishlist');
+      set({
+        wishlist: response.items.map((item) => normalizeProduct(item.product)),
+        isLoading: false,
+      });
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
   },
 
-  isInWishlist: (productId) => {
-    return get().wishlist.some((item) => item.id === productId);
+  toggleWishlist: async (product) => {
+    set({ isLoading: true, error: '' });
+    try {
+      await api.post(`/wishlist/toggle/${product.id}`);
+      const response = await api.get('/wishlist');
+      set({
+        wishlist: response.items.map((item) => normalizeProduct(item.product)),
+        isLoading: false,
+      });
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
   },
 
-  clearWishlist: () => {
-    localStorage.removeItem(WISHLIST_STORAGE_KEY);
-    set({ wishlist: [] });
-  },
-
-  getCount: () => {
-    return get().wishlist.length;
-  }
+  isInWishlist: (productId) => get().wishlist.some((item) => item.id === productId),
+  getCount: () => get().wishlist.length,
+  reset: () => set({ wishlist: [], isLoading: false, error: '' }),
 }));

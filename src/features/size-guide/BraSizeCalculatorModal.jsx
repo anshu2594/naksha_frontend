@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ruler, Sparkles, CheckCircle2, HelpCircle, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { calculateBraSize } from '../../utils/braSizeMath';
-import { useFilterStore } from '../../store/useFilterStore';
 
 export function BraSizeCalculatorModal({ isOpen, onClose }) {
   const navigate = useNavigate();
@@ -14,9 +13,6 @@ export function BraSizeCalculatorModal({ isOpen, onClose }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
 
-  const toggleSize = useFilterStore((s) => s.toggleSize);
-  const toggleCup = useFilterStore((s) => s.toggleCup);
-  const setCategory = useFilterStore((s) => s.setCategory);
 
   const handleCalculate = (e) => {
     e.preventDefault();
@@ -50,11 +46,8 @@ export function BraSizeCalculatorModal({ isOpen, onClose }) {
 
   const handleApplySizeAndShop = () => {
     if (result) {
-      setCategory('bra');
-      toggleSize(result.bandSize.toString());
-      toggleCup(result.cupLetter);
       onClose();
-      navigate('/shop?cat=bra');
+      navigate('/shop?cat=Bras');
     }
   };
 
@@ -155,6 +148,9 @@ export function BraSizeCalculatorModal({ isOpen, onClose }) {
               <p className="text-xs text-brand-subtle mt-1">
                 Band: <strong>{result.bandSize}</strong> • Cup: <strong>{result.cupLetter}</strong>
               </p>
+              <p className="text-[11px] text-brand-subtle mt-2">
+                The current catalog does not publish size-specific stock; use this result as a fitting guide.
+              </p>
             </div>
 
             {/* Sister Sizes */}
@@ -185,7 +181,7 @@ export function BraSizeCalculatorModal({ isOpen, onClose }) {
               onClick={handleApplySizeAndShop}
               className="mt-2"
             >
-              Shop Bras in Size {result.fullSize}
+              Browse Bras
               <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>

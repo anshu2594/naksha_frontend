@@ -1,19 +1,19 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { X, Ruler, Heart, ShoppingBag, ShieldCheck, Sparkles } from 'lucide-react';
-import { useFilterStore } from '../../store/useFilterStore';
+import { Link, useNavigate } from 'react-router-dom';
+import { X, Ruler, Heart, ShieldCheck } from 'lucide-react';
 import { useWishlistStore } from '../../store/useWishlistStore';
+import { useCatalogStore } from '../../store/useCatalogStore';
+import { useAuthStore } from '../../store/useAuthStore';
 
 export function MobileNav({ isOpen, onClose }) {
-  const setCategory = useFilterStore((s) => s.setCategory);
+  const navigate = useNavigate();
   const wishlistCount = useWishlistStore((s) => s.getCount());
+  const categories = useCatalogStore((s) => s.categories);
+  const user = useAuthStore((s) => s.user);
 
   if (!isOpen) return null;
 
-  const handleNavClick = (cat = 'all') => {
-    setCategory(cat);
-    onClose();
-  };
+  const handleNavClick = () => onClose();
 
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
@@ -30,7 +30,7 @@ export function MobileNav({ isOpen, onClose }) {
               NAKSHA
             </span>
             <p className="text-[10px] uppercase tracking-widest text-brand-roseGold font-semibold">
-              Lingerie & Blouses
+              Luxury Lingerie
             </p>
           </div>
           <button
@@ -54,20 +54,16 @@ export function MobileNav({ isOpen, onClose }) {
             >
               All Collections
             </Link>
-            <Link
-              to="/shop?cat=bra"
-              onClick={() => handleNavClick('bra')}
-              className="block text-base font-medium text-brand-charcoal hover:text-brand-roseGold py-1"
-            >
-              Bras & Lingerie
-            </Link>
-            <Link
-              to="/shop?cat=blouse"
-              onClick={() => handleNavClick('blouse')}
-              className="block text-base font-medium text-brand-charcoal hover:text-brand-roseGold py-1"
-            >
-              Designer Blouses
-            </Link>
+            {categories.map((category) => (
+              <Link
+                key={category.id}
+                to={`/shop?cat=${encodeURIComponent(category.name)}`}
+                onClick={() => handleNavClick(category.name)}
+                className="block text-base font-medium text-brand-charcoal hover:text-brand-roseGold py-1"
+              >
+                {category.name}
+              </Link>
+            ))}
           </div>
 
           <div className="pt-4 border-t border-brand-nude/60 space-y-3">
@@ -83,8 +79,14 @@ export function MobileNav({ isOpen, onClose }) {
               Interactive Bra Calculator
             </Link>
             <Link
-              to="/shop?filter=wishlist"
-              onClick={onClose}
+              to={user ? '/shop?filter=wishlist' : '/account'}
+              onClick={(event) => {
+                if (!user) {
+                  event.preventDefault();
+                  navigate('/account', { state: { from: { pathname: '/shop', search: '?filter=wishlist' } } });
+                }
+                onClose();
+              }}
               className="flex items-center justify-between text-base font-medium text-brand-charcoal py-1"
             >
               <span className="flex items-center gap-2">
