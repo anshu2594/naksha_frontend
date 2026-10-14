@@ -1,19 +1,36 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Ruler, ShieldCheck, Sparkles, ArrowRight, Heart, Star, Check } from 'lucide-react';
+import { Ruler, ShieldCheck, Sparkles, ArrowRight, Star, Check } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Badge } from '../components/common/Badge';
 import { ProductCard } from '../features/products/ProductCard';
 import { BraSizeCalculatorModal } from '../features/size-guide/BraSizeCalculatorModal';
-import { PRODUCTS } from '../data/productsData';
-import { CATEGORIES } from '../data/categoriesData';
-import { useFilterStore } from '../store/useFilterStore';
+import { useCatalogStore } from '../store/useCatalogStore';
+import { getProducts, normalizeProduct } from '../services/catalog';
 
 export function HomePage() {
   const [isCalcOpen, setIsCalcOpen] = useState(false);
-  const setCategory = useFilterStore((s) => s.setCategory);
+  const [bestSellers, setBestSellers] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState('');
+  const categories = useCatalogStore((s) => s.categories);
+  const categoriesError = useCatalogStore((s) => s.error);
+  const categoriesLoading = useCatalogStore((s) => s.isLoading);
+  const loadCategories = useCatalogStore((s) => s.loadCategories);
 
-  const bestSellers = PRODUCTS.filter((p) => p.isBestSeller).slice(0, 4);
+  useEffect(() => {
+    loadCategories();
+    const controller = new AbortController();
+    getProducts({ tag: 'Bestseller', limit: 4, signal: controller.signal })
+      .then((response) => setBestSellers(response.products.map(normalizeProduct)))
+      .catch((error) => {
+        if (error.name !== 'AbortError') setProductsError(error.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setProductsLoading(false);
+      });
+    return () => controller.abort();
+  }, [loadCategories]);
 
   return (
     <div className="space-y-16 sm:space-y-24 pb-16">
@@ -26,7 +43,7 @@ export function HomePage() {
             <div className="lg:col-span-7 space-y-6 text-left">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-brand-champagne/80 text-xs font-semibold text-brand-roseGold shadow-xs">
                 <Sparkles className="w-3.5 h-3.5 text-brand-roseGold" />
-                <span>The Luxury Intimates & Ethnic Boutique</span>
+                <span>The Luxury Intimates Boutique</span>
               </div>
 
               <h1 className="text-3xl sm:text-5xl lg:text-6xl font-serif font-bold text-brand-charcoal tracking-tight leading-[1.15]">
@@ -34,20 +51,20 @@ export function HomePage() {
               </h1>
 
               <p className="text-sm sm:text-base text-brand-subtle max-w-xl leading-relaxed">
-                Discover our zero-wire everyday bras engineered for seamless invisible support, and royal ready-to-wear saree blouses crafted with interior alteration margins.
+                Discover thoughtfully designed bras, lingerie, and everyday essentials selected for comfort, quality, and confidence.
               </p>
 
               {/* CTAs */}
               <div className="flex flex-col sm:flex-row items-start justify-start gap-3.5 pt-2">
-                <Link to="/shop?cat=bra" onClick={() => setCategory('bra')}>
+                <Link to="/shop?cat=Bras">
                   <Button variant="luxury" size="lg">
-                    Shop Bras & Lingerie
+                    Shop the Collection
                     <ArrowRight className="w-4 h-4 ml-1" />
                   </Button>
                 </Link>
-                <Link to="/shop?cat=blouse" onClick={() => setCategory('blouse')}>
+                <Link to="/shop">
                   <Button variant="secondary" size="lg">
-                    Explore Designer Blouses
+                    Explore All Styles
                   </Button>
                 </Link>
               </div>
@@ -64,7 +81,13 @@ export function HomePage() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
-                  <span>4.9 / 5 Rating (12,000+ Women)</span>
+                  <span>
+                    {bestSellers.length
+                      ? `Best sellers rated ${(
+                        bestSellers.reduce((sum, product) => sum + product.rating, 0) / bestSellers.length
+                      ).toFixed(1)} / 5`
+                      : 'Customer-rated styles'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -88,11 +111,11 @@ export function HomePage() {
                 <div className="relative rounded-2xl overflow-hidden shadow-soft border border-brand-nude aspect-[3/4]">
                   <img
                     src="https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=700&q=80"
-                    alt="Royal Crimson Raw Silk Blouse"
+                    alt="Naksha lingerie collection"
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute bottom-2.5 left-2.5 bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-lg text-[11px] font-semibold text-brand-charcoal">
-                    Bridal Zari Work
+                    Curated Lingerie
                   </div>
                 </div>
               </div>
@@ -146,18 +169,28 @@ export function HomePage() {
             Explore Curated Collections
           </h2>
           <p className="text-xs sm:text-sm text-brand-subtle">
-            Specialized engineering for daily intimates and heritage craftsmanship for Indian festive wear.
+            Explore the real-time collections available in the Naksha catalog.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {CATEGORIES.map((cat) => (
+        {categoriesError ? (
+          <p role="alert" className="text-sm text-rose-700 bg-rose-50 border border-rose-200 p-4 rounded-xl">{categoriesError}</p>
+        ) : categoriesLoading ? (
+          <p role="status" className="text-sm text-brand-subtle">Loading collections…</p>
+        ) : categories.length === 0 ? (
+          <div className="text-center space-y-3">
+            <p className="text-sm text-brand-subtle">No collections are available right now.</p>
+            <Button variant="outline" size="sm" onClick={loadCategories}>Retry</Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {categories.map((cat) => (
             <div
               key={cat.id}
               className="group relative rounded-3xl overflow-hidden bg-brand-cream border border-brand-nude shadow-soft aspect-[16/10] flex flex-col justify-end p-6 sm:p-8"
             >
               <img
-                src={cat.image}
+                src={cat.image_url}
                 alt={cat.name}
                 className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
               />
@@ -170,20 +203,9 @@ export function HomePage() {
                 <p className="text-xs text-gray-200 line-clamp-2 max-w-md">
                   {cat.description}
                 </p>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {cat.subcategories.slice(1, 4).map((sub) => (
-                    <span
-                      key={sub.id}
-                      className="text-[11px] bg-white/20 backdrop-blur-xs text-white px-2.5 py-1 rounded-full font-medium"
-                    >
-                      {sub.name}
-                    </span>
-                  ))}
-                </div>
                 <div className="pt-2">
                   <Link
-                    to={`/shop?cat=${cat.id}`}
-                    onClick={() => setCategory(cat.id)}
+                    to={`/shop?cat=${encodeURIComponent(cat.name)}`}
                     className="inline-flex items-center text-xs font-semibold text-rose-300 hover:text-white group-hover:underline"
                   >
                     Explore All {cat.name} <ArrowRight className="w-3.5 h-3.5 ml-1" />
@@ -192,7 +214,8 @@ export function HomePage() {
               </div>
             </div>
           ))}
-        </div>
+          </div>
+        )}
       </section>
 
       {/* 4. Best Sellers Showcase */}
@@ -215,9 +238,15 @@ export function HomePage() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
-          {bestSellers.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
+          {productsError ? (
+            <p role="alert" className="col-span-full text-sm text-rose-700 bg-rose-50 border border-rose-200 p-4 rounded-xl">{productsError}</p>
+          ) : productsLoading ? (
+            <p role="status" className="col-span-full text-sm text-brand-subtle">Loading best sellers…</p>
+          ) : bestSellers.length ? (
+            bestSellers.map((product) => <ProductCard key={product.id} product={product} />)
+          ) : (
+            <p className="col-span-full text-sm text-brand-subtle">No best sellers are available right now.</p>
+          )}
         </div>
       </section>
 

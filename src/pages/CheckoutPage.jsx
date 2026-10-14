@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ShieldCheck, Lock, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { Lock, ArrowLeft } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore';
-import { formatCurrency } from '../utils/formatCurrency';
 import { AddressForm } from '../features/checkout/AddressForm';
 import { PaymentSelector } from '../features/checkout/PaymentSelector';
 import { OrderSummary } from '../features/cart/OrderSummary';
+import { api } from '../services/api';
+import { Button } from '../components/common/Button';
 
 export function CheckoutPage() {
   const navigate = useNavigate();
-  const { items, getSubtotal, getTotalSavings, clearCart } = useCartStore();
+  const { items, shippingFee, isLoading, error: cartError, loadCart, getSubtotal, getTotalSavings, reset } = useCartStore();
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -36,13 +37,28 @@ export function CheckoutPage() {
     }));
   };
 
-  const handlePlaceOrder = (e) => {
+  const handleCartRetry = async () => {
+    try {
+      await loadCart();
+    } catch {
+      // The cart store exposes the request error for the checkout page.
+    }
+  };
+
+  const handlePlaceOrder = async (e) => {
     e.preventDefault();
+    if (isProcessing) return;
     setErrorMsg('');
 
     // Simple validation
-    if (!formData.fullName || !formData.phone || !formData.address || !formData.city || !formData.pincode) {
+    if (!formData.fullName.trim() || !formData.phone.trim() || !formData.address.trim()
+      || !formData.city.trim() || !formData.state.trim() || !formData.pincode.trim()) {
       setErrorMsg('Please complete all required shipping fields before placing your order.');
+      return;
+    }
+
+    if (formData.phone.replace(/\D/g, '').length < 7 || formData.pincode.trim().length < 4) {
+      setErrorMsg('Enter a valid phone number and PIN code.');
       return;
     }
 
@@ -52,30 +68,40 @@ export function CheckoutPage() {
     }
 
     setIsProcessing(true);
-
-    // Simulate payment and order creation
-    setTimeout(() => {
-      const orderDetails = {
-        orderId: `NAKSHA-${Math.floor(100000 + Math.random() * 900000)}`,
-        items: [...items],
-        total: subtotal >= 999 ? subtotal : subtotal + 99,
-        shippingAddress: { ...formData },
-        paymentMethod,
-        date: new Date().toLocaleDateString('en-IN', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-        }),
-      };
-
-      // Clear cart and redirect
-      clearCart();
+    try {
+      const paymentMethods = { upi: 'UPI', card: 'CARD', cod: 'COD' };
+      const order = await api.post('/orders', {
+        shipping_name: formData.fullName.trim(),
+        shipping_phone: formData.phone.trim(),
+        shipping_address: formData.address.trim(),
+        shipping_city: formData.city.trim(),
+        shipping_state: formData.state.trim(),
+        shipping_pincode: formData.pincode.trim(),
+        payment_method: paymentMethods[paymentMethod],
+        order_notes: formData.discreetPackage ? 'Discreet packaging requested' : '',
+        from_cart: true,
+      });
+      reset();
       setIsProcessing(false);
-      navigate('/order-success', { state: { order: orderDetails } });
-    }, 1200);
+      navigate(`/order-success?id=${order.id}`, { state: { order } });
+    } catch (error) {
+      setErrorMsg(error.message);
+      setIsProcessing(false);
+    }
   };
 
   if (items.length === 0) {
+    if (isLoading) {
+      return <div role="status" className="max-w-2xl mx-auto px-4 py-20 text-center text-sm text-brand-subtle">Loading your shopping bag…</div>;
+    }
+    if (cartError) {
+      return (
+        <div className="max-w-2xl mx-auto px-4 py-20 text-center space-y-4">
+          <p role="alert" className="text-sm text-rose-700 bg-rose-50 border border-rose-200 p-4 rounded-xl">{cartError}</p>
+          <Button variant="outline" onClick={handleCartRetry}>Retry</Button>
+        </div>
+      );
+    }
     return (
       <div className="max-w-2xl mx-auto px-4 py-20 text-center space-y-4">
         <h2 className="text-2xl font-serif font-bold text-brand-charcoal">Your bag is empty</h2>
@@ -95,7 +121,7 @@ export function CheckoutPage() {
         <div>
           <span className="text-xs uppercase tracking-widest text-brand-roseGold font-bold flex items-center gap-1.5">
             <Lock className="w-3.5 h-3.5" />
-            256-Bit SSL Encrypted Checkout
+            Secure order checkout
           </span>
           <h1 className="text-2xl sm:text-3xl font-serif font-bold text-brand-charcoal mt-1">
             Express Checkout
@@ -131,7 +157,7 @@ export function CheckoutPage() {
           <OrderSummary
             subtotal={subtotal}
             savings={savings}
-            shippingFee={99}
+            shippingFee={shippingFee}
             onProceedToCheckout={handlePlaceOrder}
             showCheckoutBtn={true}
             isCheckingOut={isProcessing}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingBag, ArrowRight, ShieldCheck, Trash2, Plus, Minus } from 'lucide-react';
+import { ShoppingBag, ShieldCheck, Trash2, Plus, Minus } from 'lucide-react';
 import { Drawer } from '../common/Drawer';
 import { Button } from '../common/Button';
 import { useCartStore } from '../../store/useCartStore';
@@ -12,6 +12,11 @@ export function CartDrawer() {
     isOpen,
     closeCart,
     items,
+    error,
+    isLoading,
+    clearError,
+    loadCart,
+    getItemCount,
     removeItem,
     updateQuantity,
     getSubtotal,
@@ -28,6 +33,15 @@ export function CartDrawer() {
     navigate('/checkout');
   };
 
+  const handleCartAction = async (action) => {
+    clearError();
+    try {
+      await action();
+    } catch {
+      // The cart store exposes request failures for display in this drawer.
+    }
+  };
+
   const handleViewCartClick = () => {
     closeCart();
     navigate('/cart');
@@ -38,16 +52,23 @@ export function CartDrawer() {
       isOpen={isOpen}
       onClose={closeCart}
       title="Shopping Bag"
-      subtitle={`${items.length} ${items.length === 1 ? 'item' : 'items'} in your cart`}
+      subtitle={`${getItemCount()} ${getItemCount() === 1 ? 'item' : 'items'} in your cart`}
     >
-      {items.length === 0 ? (
+      {items.length === 0 && isLoading ? (
+        <p role="status" className="py-16 text-center text-sm text-brand-subtle">Loading your shopping bag…</p>
+      ) : items.length === 0 && error ? (
+        <div className="text-center py-16 space-y-3">
+          <p role="alert" className="text-xs text-rose-700 bg-rose-50 border border-rose-200 p-3 rounded-xl">{error}</p>
+          <Button variant="outline" size="sm" onClick={() => handleCartAction(loadCart)}>Retry</Button>
+        </div>
+      ) : items.length === 0 ? (
         <div className="h-full flex flex-col items-center justify-center text-center py-16">
           <div className="w-16 h-16 bg-brand-nude/70 rounded-full flex items-center justify-center text-brand-roseGold mb-4">
             <ShoppingBag className="w-8 h-8 stroke-[1.5]" />
           </div>
           <h3 className="text-base font-serif font-semibold text-brand-charcoal">Your bag is empty</h3>
           <p className="text-xs text-brand-subtle max-w-xs mt-1 mb-6">
-            Explore our buttery soft everyday bras and exquisite designer blouses to fill it up.
+            Explore the latest styles in the Naksha collection.
           </p>
           <Button variant="luxury" size="sm" onClick={closeCart}>
             Start Shopping
@@ -55,6 +76,18 @@ export function CartDrawer() {
         </div>
       ) : (
         <div className="flex flex-col h-full">
+          {error && (
+            <div className="mb-3 p-2.5 bg-rose-50 text-rose-700 text-xs rounded-lg border border-rose-200">
+              <p role="alert">{error}</p>
+              <button
+                type="button"
+                onClick={() => handleCartAction(loadCart)}
+                className="mt-1 font-semibold underline"
+              >
+                Retry
+              </button>
+            </div>
+          )}
           
           {/* Free Shipping Tracker */}
           <div className="bg-brand-cream p-3 rounded-xl border border-brand-champagne/40 mb-4">
@@ -94,7 +127,8 @@ export function CartDrawer() {
                       {item.name}
                     </h4>
                     <button
-                      onClick={() => removeItem(item.cartItemId)}
+                      onClick={() => handleCartAction(() => removeItem(item.cartItemId))}
+                      disabled={isLoading}
                       className="text-brand-subtle hover:text-rose-600 transition-colors p-1"
                       title="Remove"
                     >
@@ -107,24 +141,15 @@ export function CartDrawer() {
                     <span className="bg-brand-nude/60 px-1.5 py-0.5 rounded text-brand-charcoal font-medium">
                       Size: {item.selectedSize}{item.selectedCup ? item.selectedCup : ''}
                     </span>
-                    {item.selectedColor && (
-                      <span className="flex items-center gap-1 bg-brand-nude/60 px-1.5 py-0.5 rounded">
-                        <span
-                          className="w-2 h-2 rounded-full inline-block"
-                          style={{ backgroundColor: item.colorHex }}
-                        />
-                        {item.selectedColor}
-                      </span>
-                    )}
                   </div>
 
                   {/* Price & Quantity Adjuster */}
                   <div className="flex items-center justify-between mt-3">
                     <div className="flex items-center border border-brand-nude rounded-full bg-white">
                       <button
-                        onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
+                        onClick={() => handleCartAction(() => updateQuantity(item.cartItemId, item.quantity - 1))}
+                        disabled={isLoading || item.quantity <= 1}
                         className="p-1 hover:text-brand-roseGold transition-colors"
-                        disabled={item.quantity <= 1}
                       >
                         <Minus className="w-3 h-3 text-brand-subtle" />
                       </button>
@@ -132,7 +157,8 @@ export function CartDrawer() {
                         {item.quantity}
                       </span>
                       <button
-                        onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
+                        onClick={() => handleCartAction(() => updateQuantity(item.cartItemId, item.quantity + 1))}
+                        disabled={isLoading}
                         className="p-1 hover:text-brand-roseGold transition-colors"
                       >
                         <Plus className="w-3 h-3 text-brand-subtle" />

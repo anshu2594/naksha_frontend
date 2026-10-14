@@ -9,7 +9,7 @@ const ANNOUNCEMENTS = [
   },
   {
     icon: <Truck className="w-3.5 h-3.5 text-amber-300" />,
-    text: 'Free Express Discreet Delivery on Orders Above ₹999',
+    text: 'Free Shipping on Orders Above ₹999',
   },
   {
     icon: <Sparkles className="w-3.5 h-3.5 text-rose-300" />,

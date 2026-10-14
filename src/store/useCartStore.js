@@ -1,119 +1,142 @@
 import { create } from 'zustand';
+import { api, getStoredSession } from '../services/api';
+import { normalizeProduct } from '../services/catalog';
 
-const CART_STORAGE_KEY = 'naksha_boutique_cart_v1';
 const FREE_SHIPPING_THRESHOLD = 999;
 
-const getInitialCart = () => {
-  try {
-    const saved = localStorage.getItem(CART_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
-  } catch (e) {
-    console.error('Failed to load cart from localStorage', e);
-    return [];
-  }
-};
+function normalizeCartItem(item) {
+  const product = normalizeProduct(item.product);
+  return {
+    ...product,
+    cartItemId: String(item.id),
+    productId: item.product_id,
+    name: item.product.name,
+    image: item.product.image,
+    price: item.product.price,
+    originalPrice: item.product.original_price,
+    selectedSize: item.size || 'M',
+    selectedCup: null,
+    selectedColor: null,
+    quantity: item.quantity,
+  };
+}
+
+function cartState(response) {
+  return {
+    items: response.items.map(normalizeCartItem),
+    subtotal: response.subtotal,
+    shippingFee: response.shipping_fee,
+    freeShippingThreshold: response.free_shipping_threshold,
+    qualifiesForFreeShipping: response.qualifies_for_free_shipping,
+  };
+}
 
 export const useCartStore = create((set, get) => ({
-  items: getInitialCart(),
+  items: [],
+  subtotal: 0,
+  shippingFee: 0,
+  freeShippingThreshold: FREE_SHIPPING_THRESHOLD,
+  qualifiesForFreeShipping: false,
   isOpen: false,
+  isLoading: Boolean(getStoredSession()?.access_token),
+  error: '',
 
   openCart: () => set({ isOpen: true }),
   closeCart: () => set({ isOpen: false }),
   toggleCart: () => set((state) => ({ isOpen: !state.isOpen })),
+  clearError: () => set({ error: '' }),
 
-  addItem: (product, { selectedSize, selectedCup = null, selectedColor }) => {
-    set((state) => {
-      // Create a unique composite key for item variation
-      const cartItemId = `${product.id}-${selectedSize}-${selectedCup || 'none'}-${selectedColor?.name || 'default'}`;
-
-      const existingIndex = state.items.findIndex((item) => item.cartItemId === cartItemId);
-      let updatedItems;
-
-      if (existingIndex > -1) {
-        updatedItems = state.items.map((item, idx) =>
-          idx === existingIndex ? { ...item, quantity: item.quantity + 1 } : item
-        );
-      } else {
-        const newItem = {
-          cartItemId,
-          productId: product.id,
-          name: product.name,
-          slug: product.slug,
-          price: product.price,
-          originalPrice: product.originalPrice,
-          category: product.category,
-          image: product.images[0],
-          selectedSize,
-          selectedCup,
-          selectedColor: selectedColor?.name || 'Default',
-          colorHex: selectedColor?.hex || '#C06C64',
-          quantity: 1,
-        };
-        updatedItems = [newItem, ...state.items];
-      }
-
-      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(updatedItems));
-      return { items: updatedItems, isOpen: true };
-    });
+  loadCart: async () => {
+    set({ isLoading: true, error: '' });
+    try {
+      const response = await api.get('/cart');
+      set({ ...cartState(response), isLoading: false });
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
   },
 
-  removeItem: (cartItemId) => {
-    set((state) => {
-      const updated = state.items.filter((item) => item.cartItemId !== cartItemId);
-      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(updated));
-      return { items: updated };
-    });
+  addItem: async (product, { selectedSize = 'M' } = {}) => {
+    set({ isLoading: true, error: '' });
+    try {
+      const response = await api.post('/cart/items', {
+        product_id: Number(product.id),
+        quantity: 1,
+        size: selectedSize,
+      });
+      set({ ...cartState(response), isLoading: false, isOpen: true });
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
   },
 
-  updateQuantity: (cartItemId, newQty) => {
-    set((state) => {
-      if (newQty <= 0) {
-        const updated = state.items.filter((item) => item.cartItemId !== cartItemId);
-        localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(updated));
-        return { items: updated };
-      }
-
-      const updated = state.items.map((item) =>
-        item.cartItemId === cartItemId ? { ...item, quantity: newQty } : item
-      );
-      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(updated));
-      return { items: updated };
-    });
+  removeItem: async (cartItemId) => {
+    set({ isLoading: true, error: '' });
+    try {
+      const response = await api.delete(`/cart/items/${cartItemId}`);
+      set({ ...cartState(response), isLoading: false });
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
   },
 
-  clearCart: () => {
-    localStorage.removeItem(CART_STORAGE_KEY);
-    set({ items: [] });
+  updateQuantity: async (cartItemId, newQty) => {
+    if (newQty <= 0) return get().removeItem(cartItemId);
+    set({ isLoading: true, error: '' });
+    try {
+      const response = await api.put(`/cart/items/${cartItemId}`, {
+        quantity: Math.min(newQty, 50),
+      });
+      set({ ...cartState(response), isLoading: false });
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
   },
 
-  getSubtotal: () => {
-    const items = get().items;
-    return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  clearCart: async () => {
+    set({ isLoading: true, error: '' });
+    try {
+      await api.delete('/cart');
+      set({
+        items: [],
+        subtotal: 0,
+        shippingFee: 0,
+        qualifiesForFreeShipping: true,
+        isLoading: false,
+      });
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
   },
 
-  getTotalSavings: () => {
-    const items = get().items;
-    return items.reduce((sum, item) => {
-      const orig = item.originalPrice || item.price;
-      return sum + (orig - item.price) * item.quantity;
-    }, 0);
-  },
+  reset: () => set({
+    items: [],
+    subtotal: 0,
+    shippingFee: 0,
+    qualifiesForFreeShipping: false,
+    isOpen: false,
+    isLoading: false,
+    error: '',
+  }),
 
-  getItemCount: () => {
-    const items = get().items;
-    return items.reduce((count, item) => count + item.quantity, 0);
-  },
-
+  getSubtotal: () => get().subtotal,
+  getTotalSavings: () => get().items.reduce((sum, item) => (
+    sum + Math.max(0, (item.originalPrice || item.price) - item.price) * item.quantity
+  ), 0),
+  getItemCount: () => get().items.reduce((count, item) => count + item.quantity, 0),
   getFreeShippingProgress: () => {
-    const subtotal = get().getSubtotal();
-    const remaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
-    const percentage = Math.min(100, Math.round((subtotal / FREE_SHIPPING_THRESHOLD) * 100));
+    const { subtotal, freeShippingThreshold, qualifiesForFreeShipping } = get();
     return {
-      threshold: FREE_SHIPPING_THRESHOLD,
+      threshold: freeShippingThreshold,
       subtotal,
-      remaining,
-      percentage,
-      isQualified: subtotal >= FREE_SHIPPING_THRESHOLD,
+      remaining: Math.max(0, freeShippingThreshold - subtotal),
+      percentage: Math.min(100, Math.round((subtotal / freeShippingThreshold) * 100)),
+      isQualified: qualifiesForFreeShipping,
     };
   },
 }));

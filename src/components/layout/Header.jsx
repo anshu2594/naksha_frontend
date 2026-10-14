@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, Heart, ShoppingBag, Menu, X, Ruler } from 'lucide-react';
+import { Search, Heart, ShoppingBag, Menu, X, Ruler, UserRound } from 'lucide-react';
 import { useCartStore } from '../../store/useCartStore';
 import { useWishlistStore } from '../../store/useWishlistStore';
 import { useFilterStore } from '../../store/useFilterStore';
+import { useAuthStore } from '../../store/useAuthStore';
+import { useCatalogStore } from '../../store/useCatalogStore';
 
 export function Header({ onOpenMobileNav }) {
   const navigate = useNavigate();
@@ -15,7 +17,8 @@ export function Header({ onOpenMobileNav }) {
   const cartCount = useCartStore((s) => s.getItemCount());
   const wishlistCount = useWishlistStore((s) => s.getCount());
   const setSearchQuery = useFilterStore((s) => s.setSearchQuery);
-  const setCategory = useFilterStore((s) => s.setCategory);
+  const categories = useCatalogStore((s) => s.categories);
+  const user = useAuthStore((s) => s.user);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -27,9 +30,11 @@ export function Header({ onOpenMobileNav }) {
   };
 
   const navLinks = [
-    { name: 'Shop All', path: '/shop', onClick: () => setCategory('all') },
-    { name: 'Bras & Lingerie', path: '/shop?cat=bra', onClick: () => setCategory('bra') },
-    { name: 'Designer Blouses', path: '/shop?cat=blouse', onClick: () => setCategory('blouse') },
+    { name: 'Shop All', path: '/shop' },
+    ...categories.slice(0, 3).map((category) => ({
+      name: category.name,
+      path: `/shop?cat=${encodeURIComponent(category.name)}`,
+    })),
     { name: 'Fit Calculator', path: '/bra-size-calculator', icon: <Ruler className="w-3.5 h-3.5 mr-1 text-brand-roseGold" /> },
   ];
 
@@ -70,7 +75,6 @@ export function Header({ onOpenMobileNav }) {
                 <Link
                   key={link.name}
                   to={link.path}
-                  onClick={link.onClick}
                   className={`inline-flex items-center text-sm font-medium transition-colors hover:text-brand-roseGold relative py-1 ${
                     isActive ? 'text-brand-roseGold font-semibold' : 'text-brand-charcoal'
                   }`}
@@ -121,8 +125,11 @@ export function Header({ onOpenMobileNav }) {
             </div>
 
             {/* Wishlist Link */}
-            <Link
-              to="/shop?filter=wishlist"
+            <button
+              type="button"
+              onClick={() => user
+                ? navigate('/shop?filter=wishlist')
+                : navigate('/account', { state: { from: { pathname: '/shop', search: '?filter=wishlist' } } })}
               className="p-2 text-brand-charcoal hover:text-brand-roseGold hover:bg-brand-nude/40 rounded-full transition-colors relative"
               aria-label="Wishlist"
             >
@@ -132,12 +139,22 @@ export function Header({ onOpenMobileNav }) {
                   {wishlistCount}
                 </span>
               )}
+            </button>
+
+            <Link
+              to="/account"
+              className="p-2 text-brand-charcoal hover:text-brand-roseGold hover:bg-brand-nude/40 rounded-full transition-colors"
+              aria-label={user ? 'Your account' : 'Sign in'}
+            >
+              <UserRound className="w-5 h-5" />
             </Link>
 
             {/* Cart Trigger */}
             <button
               type="button"
-              onClick={openCart}
+              onClick={() => user
+                ? openCart()
+                : navigate('/account', { state: { from: { pathname: '/cart' } } })}
               className="p-2 text-brand-charcoal hover:text-brand-roseGold hover:bg-brand-nude/40 rounded-full transition-colors relative"
               aria-label="Shopping Bag"
             >

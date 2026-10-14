@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, ArrowLeft, ArrowRight, Trash2, Plus, Minus, ShieldCheck } from 'lucide-react';
+import { ShoppingBag, ArrowLeft, ArrowRight, Trash2, Plus, Minus } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore';
 import { formatCurrency } from '../utils/formatCurrency';
 import { Button } from '../components/common/Button';
@@ -10,18 +10,44 @@ export function CartPage() {
   const navigate = useNavigate();
   const {
     items,
+    isLoading,
+    error,
+    clearError,
     removeItem,
     updateQuantity,
     getSubtotal,
     getTotalSavings,
     getFreeShippingProgress,
+    getItemCount,
+    loadCart,
   } = useCartStore();
 
   const subtotal = getSubtotal();
   const savings = getTotalSavings();
   const shipping = getFreeShippingProgress();
 
+  const handleCartAction = async (action) => {
+    clearError();
+    try {
+      await action();
+    } catch {
+      // The cart store exposes the request error for the page to render.
+    }
+  };
+
+  if (isLoading && items.length === 0) {
+    return <div role="status" className="max-w-4xl mx-auto px-4 py-20 text-center text-sm text-brand-subtle">Loading your shopping bag…</div>;
+  }
+
   if (items.length === 0) {
+    if (error) {
+      return (
+        <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-4">
+          <p role="alert" className="text-sm text-rose-700 bg-rose-50 border border-rose-200 p-4 rounded-xl">{error}</p>
+          <Button variant="outline" onClick={() => handleCartAction(loadCart)}>Retry</Button>
+        </div>
+      );
+    }
     return (
       <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-4">
         <div className="w-20 h-20 bg-brand-nude/70 rounded-full flex items-center justify-center text-brand-roseGold mx-auto">
@@ -51,12 +77,14 @@ export function CartPage() {
       <div className="flex items-center justify-between border-b border-brand-nude/70 pb-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-serif font-bold text-brand-charcoal">
-            Shopping Bag ({items.length})
+            Shopping Bag ({getItemCount()})
           </h1>
           <p className="text-xs text-brand-subtle mt-0.5">
             Every item is packed in 100% discreet plain packaging.
           </p>
         </div>
+
+        {error && <p role="alert" className="p-3 bg-rose-50 text-rose-700 text-xs rounded-xl border border-rose-200">{error}</p>}
 
         <Link to="/shop" className="text-xs sm:text-sm font-semibold text-brand-roseGold hover:underline flex items-center gap-1">
           <ArrowLeft className="w-4 h-4" />
@@ -111,15 +139,6 @@ export function CartPage() {
                     <span className="bg-brand-cream px-2 py-0.5 rounded-md border border-brand-nude text-brand-charcoal font-semibold">
                       Size: {item.selectedSize}{item.selectedCup ? item.selectedCup : ''}
                     </span>
-                    {item.selectedColor && (
-                      <span className="flex items-center gap-1 bg-brand-cream px-2 py-0.5 rounded-md border border-brand-nude text-brand-charcoal">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full inline-block"
-                          style={{ backgroundColor: item.colorHex }}
-                        />
-                        {item.selectedColor}
-                      </span>
-                    )}
                   </div>
 
                   <p className="text-xs text-emerald-700 font-medium pt-1">
@@ -131,9 +150,9 @@ export function CartPage() {
                 <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto pt-2 sm:pt-0">
                   <div className="flex items-center border border-brand-nude rounded-full bg-brand-cream/60">
                     <button
-                      onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
+                      onClick={() => handleCartAction(() => updateQuantity(item.cartItemId, item.quantity - 1))}
                       className="p-1.5 hover:text-brand-roseGold transition-colors"
-                      disabled={item.quantity <= 1}
+                      disabled={isLoading || item.quantity <= 1}
                     >
                       <Minus className="w-3.5 h-3.5 text-brand-subtle" />
                     </button>
@@ -141,8 +160,9 @@ export function CartPage() {
                       {item.quantity}
                     </span>
                     <button
-                      onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
+                      onClick={() => handleCartAction(() => updateQuantity(item.cartItemId, item.quantity + 1))}
                       className="p-1.5 hover:text-brand-roseGold transition-colors"
+                      disabled={isLoading}
                     >
                       <Plus className="w-3.5 h-3.5 text-brand-subtle" />
                     </button>
@@ -160,8 +180,9 @@ export function CartPage() {
                   </div>
 
                   <button
-                    onClick={() => removeItem(item.cartItemId)}
+                    onClick={() => handleCartAction(() => removeItem(item.cartItemId))}
                     className="p-2 text-brand-subtle hover:text-rose-600 transition-colors"
+                    disabled={isLoading}
                     title="Remove item"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -179,7 +200,7 @@ export function CartPage() {
           <OrderSummary
             subtotal={subtotal}
             savings={savings}
-            shippingFee={99}
+            shippingFee={shipping.isQualified ? 0 : 99}
             onProceedToCheckout={() => navigate('/checkout')}
             showCheckoutBtn={true}
           />
