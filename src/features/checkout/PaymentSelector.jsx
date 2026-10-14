@@ -6,14 +6,14 @@ export function PaymentSelector({ selectedMethod, onSelectMethod }) {
     {
       id: 'upi',
       name: 'UPI Instant Payment',
-      desc: 'Google Pay, PhonePe, Paytm, BHIM UPI',
+      desc: 'Google Pay, PhonePe, Paytm, BHIM UPI · Razorpay sandbox',
       icon: <Smartphone className="w-5 h-5 text-emerald-600" />,
-      badge: 'Popular',
+      badge: 'Sandbox',
     },
     {
       id: 'card',
       name: 'Credit / Debit Card',
-      desc: 'Visa, MasterCard, RuPay with 256-bit Bank Encryption',
+      desc: 'Visa, MasterCard, RuPay · Razorpay sandbox checkout',
       icon: <CreditCard className="w-5 h-5 text-brand-roseGold" />,
     },
     {
@@ -78,7 +78,7 @@ export function PaymentSelector({ selectedMethod, onSelectMethod }) {
       </div>
 
       <div className="text-[11px] text-brand-subtle bg-brand-cream p-3 rounded-xl border border-brand-nude/50">
-        The selected method is recorded with your order. This API does not process online payments; payment status remains pending until a payment provider is connected.
+        UPI and card payments are processed in the Razorpay sandbox. No card details are handled or stored by Naksha. Cash on Delivery is recorded with your order.
       </div>
     </div>
   );

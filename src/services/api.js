@@ -1,5 +1,6 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1').replace(/\/$/, '');
 const SESSION_STORAGE_KEY = 'naksha_auth_session_v1';
+const GUEST_ID_STORAGE_KEY = 'naksha_guest_id_v1';
 
 export class ApiError extends Error {
   constructor(message, status, detail) {
@@ -53,20 +54,62 @@ async function parseResponse(response) {
 }
 
 let refreshPromise;
+let guestIdPromise;
+
+async function ensureGuestId() {
+  let storedGuestId;
+  try {
+    storedGuestId = localStorage.getItem(GUEST_ID_STORAGE_KEY);
+  } catch (error) {
+    throw new ApiError('Browser storage is unavailable for this shopping session.', 0, error);
+  }
+  if (storedGuestId) return storedGuestId;
+
+  if (!guestIdPromise) {
+    guestIdPromise = fetch(`${API_BASE_URL}/session/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+      .then(parseResponse)
+      .then((session) => {
+        if (typeof session?.guestId !== 'string' || !session.guestId) {
+          throw new ApiError('The API returned an invalid guest session.', 502, session);
+        }
+        localStorage.setItem(GUEST_ID_STORAGE_KEY, session.guestId);
+        return session.guestId;
+      })
+      .catch((error) => {
+        throw error.status === undefined
+          ? new ApiError('Unable to create a guest session. Please try again.', 0, error)
+          : error;
+      })
+      .finally(() => {
+        guestIdPromise = null;
+      });
+  }
+
+  return guestIdPromise;
+}
 
 async function refreshSession() {
   const session = getStoredSession();
   if (!session?.refresh_token) return null;
 
   if (!refreshPromise) {
-    refreshPromise = fetch(`${API_BASE_URL}/auth/refresh`, {
+    refreshPromise = fetch(`${API_BASE_URL}/auth/refresh/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: session.refresh_token }),
+      body: JSON.stringify({ refresh: session.refresh_token }),
     })
       .then(parseResponse)
       .then((tokens) => {
-        const nextSession = { ...tokens, user: tokens.user || session.user };
+        const nextSession = {
+          ...tokens,
+          access_token: tokens.access || tokens.access_token,
+          refresh_token: tokens.refresh || tokens.refresh_token || session.refresh_token,
+          user: tokens.user || session.user,
+        };
         saveSession(nextSession);
         return nextSession;
       })
@@ -90,6 +133,8 @@ async function request(path, {
   body,
   params,
   signal,
+  headers: customHeaders,
+  guest = false,
   skipAuth = false,
   retryAuth = true,
 } = {}) {
@@ -103,8 +148,10 @@ async function request(path, {
   }
 
   const session = skipAuth ? null : getStoredSession();
-  const headers = new Headers();
-  if (body !== undefined) headers.set('Content-Type', 'application/json');
+  const headers = new Headers(customHeaders);
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+  if (body !== undefined && !isFormData) headers.set('Content-Type', 'application/json');
+  if (guest) headers.set('X-Guest-ID', await ensureGuestId());
   if (session?.access_token) headers.set('Authorization', `Bearer ${session.access_token}`);
 
   let response;
@@ -112,7 +159,7 @@ async function request(path, {
     response = await fetch(url, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
       signal,
     });
   } catch (error) {
@@ -123,7 +170,7 @@ async function request(path, {
   if (response.status === 401 && retryAuth && !skipAuth && session?.refresh_token) {
     const refreshed = await refreshSession();
     if (refreshed?.access_token) {
-      return request(path, { method, body, params, signal, retryAuth: false });
+      return request(path, { method, body, params, signal, headers: customHeaders, guest, retryAuth: false });
     }
   }
 

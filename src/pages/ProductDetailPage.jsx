@@ -17,12 +17,12 @@ export function ProductDetailPage() {
   const user = useAuthStore((s) => s.user);
   const addItem = useCartStore((s) => s.addItem);
   const toggleWishlist = useWishlistStore((s) => s.toggleWishlist);
-  const isInWishlist = useWishlistStore((s) => s.isInWishlist(Number(productId)));
 
   const [product, setProduct] = useState(null);
   const [error, setError] = useState(null);
   const [actionMessage, setActionMessage] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const isInWishlist = useWishlistStore((s) => s.isInWishlist(product?.id ?? Number(productId)));
 
   useEffect(() => {
     const controller = new AbortController();
@@ -68,7 +68,7 @@ export function ProductDetailPage() {
     }
   };
 
-  const isLoading = !product || String(product.id) !== productId;
+  const isLoading = !product || String(product.slug || product.id) !== productId;
   const currentError = error?.productId === productId ? error.message : '';
 
   if (isLoading && !currentError) {
